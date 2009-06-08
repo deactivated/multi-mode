@@ -57,12 +57,16 @@ See `multi-alist'."
 		       ;; instruction start.  Skip definitely clear of
 		       ;; it and then search backwards.
 		       (goto-char (min (point-max) (+ (point) 5)))
-		       (search-backward "<?php" (- (point) 9) t)))
+		       (re-search-backward "<\\?php\\|<\\?=" (- (point) 9) t)))
+		 (p1 (if (and p1 (<= (match-beginning 0) pos))
+			 (match-beginning 0) nil))
 		 (match-end (if p1 (match-end 0)))
 		 ;; Otherwise search backwards simply.
-		 (p2 (unless p1 (search-backward "<?php" nil t))))
+		 (p2 (unless p1 (re-search-backward "<\\?php\\|<\\?=" nil t))))
+	    
 	    (if p2 (setq match-end (match-end 0)))
 	    (setq pi-start (or p1 p2))
+
 	    ;; Ready to search for matching terminator or next
 	    ;; processing instruction.
 	    (goto-char (or match-end pos)))
@@ -80,7 +84,7 @@ See `multi-alist'."
 	      (list 'php-mode pi-start pi-end)
 	    ;; Otherwise, look forward for a PI to delimit the HTML
 	    ;; region.
-	    (setq next-pi (if (search-forward "<?php" nil t)
+	    (setq next-pi (if (re-search-forward "<\\?php\\|<\\?=" nil t)
 			      (match-beginning 0)
 			    (point-max)))
 	    (if pi-start
