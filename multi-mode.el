@@ -366,8 +366,11 @@ Assigned to `font-lock-fontify-region-function'."
 Fontifies chunk-by-chunk within the region from START for up to
 `multi-fontification-chunk-size' characters."
   (save-restriction
-    (multi-narrow-to-chunk)
-    (run-hook-with-args 'multi-normal-fontify-functions start)))
+    (widen)
+    (save-excursion
+      (goto-char start)
+      (multi-narrow-to-chunk)
+      (run-hook-with-args 'multi-normal-fontify-functions start))))
 
 (defun multi-create-index ()
   "Create Imenu index alist for the currently-selected buffer.
