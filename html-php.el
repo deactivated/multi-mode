@@ -42,6 +42,11 @@
 	 (php-mode . html-php-chunk-region)))
   (multi-mode-install-modes))
 
+(add-hook 'multi-indirect-buffer-hook
+	  (lambda ()
+	    (when (eq major-mode 'html-mode)
+	      (setq indent-line-function 'sgml-indent-line))))
+
 (defun html-php-chunk-region (pos)
   "Mode-selecting function for PHP embedded in HTML.
 See `multi-alist'."
