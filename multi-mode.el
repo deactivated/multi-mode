@@ -369,8 +369,9 @@ Fontifies chunk-by-chunk within the region from START for up to
     (widen)
     (save-excursion
       (goto-char start)
-      (multi-narrow-to-chunk)
-      (run-hook-with-args 'multi-normal-fontify-functions start))))
+      (save-restriction
+	(multi-narrow-to-chunk)
+	(run-hook-with-args 'multi-normal-fontify-functions start)))))
 
 (defun multi-create-index ()
   "Create Imenu index alist for the currently-selected buffer.
