@@ -144,7 +144,7 @@ Internal use.  Buffer local.")
 (defvar multi-ppss nil
   "Cache used to propagate parse state across chunks.  Buffer
 local.")
-(make-variable-buffer-loal 'multi-ppss)
+(make-variable-buffer-local 'multi-ppss)
 
 (defvar multi-indirect-buffer-hook nil
   "Hook run by `multi-install-mode' in each indirect buffer.
@@ -379,40 +379,33 @@ Fontifies chunk-by-chunk within the region from START for up to
 	(multi-narrow-to-chunk)
 	(run-hook-with-args 'multi-normal-fontify-functions start)))))
 
-;; add ppss hack
+;; Patch font-lock-fontify-syntactically-region to maintain parse
+;; state across chunks using the buffer-local `multi-ppss'.
 (defalias 'font-lock-fontify-syntactically-region
   `(lambda (start end &optional loudly ppss)
      (if (eq multi-normal-fontify-function
 	     'font-lock-default-fontify-region)
 	 (progn
 	   (setq multi-ppss
-		 (delete-if
-		  (lambda (x)
-		    (and (>= (car x) beg)
-			 (<= (car x) end)))
-		  multi-ppss))
-	     
-	   (let (maxent rval state)
-	     (dolist (x multi-ppss)
-	       (if (and (< (car x) beg)
-			(or (null maxent)
-			    (> (car x) (car maxent))))
-		   (setq maxent x)))
-
-	     (setq old-state (or ppss (cdr maxent)))
-
+		 (delete-if (lambda (x)
+			      (and (>= (car x) beg)
+				   (<= (car x) end)))
+			    multi-ppss))
+	   (let (nearest rval old-state)
+	     (dolist (chunk multi-ppss)
+	       (if (and (< (car chunk) beg)
+			(or (null nearest) (> (car chunk) (car nearest))))
+		   (setq nearest chunk)))
+	     (setq old-state (or ppss (cdr nearest)))
 	     (let ((state (parse-partial-sexp beg end nil nil old-state)))
-	       (setq multi-ppss
-		(cons (cons end state) multi-ppss)))
-
+	       (add-to-list 'multi-ppss (cons end state)))
+	     
 	     (funcall
 	      ,(symbol-function 'font-lock-fontify-syntactically-region)
 	      start end loudly old-state)))
-       
        (funcall 
 	,(symbol-function 'font-lock-fontify-syntactically-region)
-	start end loudly ppss)))
-  )
+	start end loudly ppss))))
 
 (defun multi-create-index ()
   "Create Imenu index alist for the currently-selected buffer.
