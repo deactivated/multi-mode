@@ -141,6 +141,11 @@ Internal use.  Buffer local.")
 Internal use.  Buffer local.")
 (make-variable-buffer-local 'multi-normal-fontify-functions)
 
+(defvar multi-ppss nil
+  "Cache used to propagate parse state across chunks.  Buffer
+local.")
+(make-variable-buffer-loal 'multi-ppss)
+
 (defvar multi-indirect-buffer-hook nil
   "Hook run by `multi-install-mode' in each indirect buffer.
 It is run after all the indirect buffers have been set up.")
@@ -276,6 +281,7 @@ is the base mode."
 				     (call-interactively ',tab))))
 			      map))
 		      minor-mode-map-alist)))
+	    (setq multi-ppss '())
 	    (setq multi-normal-fontify-function
 		  font-lock-fontify-region-function)
 	    (set (make-local-variable 'font-lock-fontify-region-function)
@@ -372,6 +378,41 @@ Fontifies chunk-by-chunk within the region from START for up to
       (save-restriction
 	(multi-narrow-to-chunk)
 	(run-hook-with-args 'multi-normal-fontify-functions start)))))
+
+;; add ppss hack
+(defalias 'font-lock-fontify-syntactically-region
+  `(lambda (start end &optional loudly ppss)
+     (if (eq multi-normal-fontify-function
+	     'font-lock-default-fontify-region)
+	 (progn
+	   (setq multi-ppss
+		 (delete-if
+		  (lambda (x)
+		    (and (>= (car x) beg)
+			 (<= (car x) end)))
+		  multi-ppss))
+	     
+	   (let (maxent rval state)
+	     (dolist (x multi-ppss)
+	       (if (and (< (car x) beg)
+			(or (null maxent)
+			    (> (car x) (car maxent))))
+		   (setq maxent x)))
+
+	     (setq old-state (or ppss (cdr maxent)))
+
+	     (let ((state (parse-partial-sexp beg end nil nil old-state)))
+	       (setq multi-ppss
+		(cons (cons end state) multi-ppss)))
+
+	     (funcall
+	      ,(symbol-function 'font-lock-fontify-syntactically-region)
+	      start end loudly old-state)))
+       
+       (funcall 
+	,(symbol-function 'font-lock-fontify-syntactically-region)
+	start end loudly ppss)))
+  )
 
 (defun multi-create-index ()
   "Create Imenu index alist for the currently-selected buffer.
