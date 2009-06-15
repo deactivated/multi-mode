@@ -299,6 +299,7 @@ is the base mode."
 	    (add-hook 'kill-buffer-hook
 		      '(lambda ()
 			 (setq kill-buffer-hook nil)
+			 (set-buffer-modified-p nil)
 			 (kill-buffer (buffer-base-buffer (current-buffer))))
 		      t t)
 	    ;; This should probably be at the front of the hook list, so
