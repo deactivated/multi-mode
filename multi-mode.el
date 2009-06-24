@@ -264,7 +264,12 @@ is the base mode."
 		   `(lambda ()
 		      (save-restriction
 			(multi-narrow-to-chunk)
-			(,indent-line-function)))))
+			(,indent-line-function)
+			(when (multi-indenting-chunk-p)
+			  (let ((min-indent (multi-chunk-column)))
+			    (back-to-indentation)
+			    (if (< (current-column) min-indent)
+				(indent-line-to min-indent))))))))
 	    ;; Now handle the case where the mode binds TAB directly.
 	    ;; Bind it in an overriding map to use the local definition,
 	    ;; but narrowed to the chunk.
@@ -443,6 +448,20 @@ Assigned to `imenu-create-index-function'."
   (interactive)
   (unless (= (point-min) (point-max))
     (apply #'narrow-to-region (cdr (multi-find-mode-at)))))
+
+(defun multi-indenting-chunk-p ()
+  "Is the current chunk in charge of indenting the current line?"
+  (let ((chunk (multi-find-mode-at)))
+    (and (>= (line-beginning-position) (nth 1 chunk))
+	 (< (line-beginning-position) (nth 2 chunk)))))
+
+(defun multi-chunk-column ()
+  "Return the starting column of the current chunk."
+  (save-restriction
+    (widen)
+    (save-excursion 
+      (goto-char (nth 1 (multi-find-mode-at)))
+      (current-column))))
 
 (defun multi-select-buffer ()
   "Select the appropriate (indirect) buffer corresponding to point's context."
