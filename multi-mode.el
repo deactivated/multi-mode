@@ -264,12 +264,16 @@ is the base mode."
 		   `(lambda ()
 		      (save-restriction
 			(multi-narrow-to-chunk)
-			(,indent-line-function)
-			(when (multi-indenting-chunk-p)
-			  (let ((min-indent (multi-chunk-column)))
-			    (back-to-indentation)
-			    (if (< (current-column) min-indent)
-				(indent-line-to min-indent))))))))
+			(let ((initial-column (current-column)) offset)
+			  (,indent-line-function)
+			  (when (multi-indenting-chunk-p)
+			    (let ((min-indent (+ 2 (multi-chunk-column))))
+			      (back-to-indentation)
+			      (setq offset (- initial-column (current-column)))
+			      (if (< (current-column) min-indent)
+				  (indent-line-to min-indent))
+			      (if (> initial-column 0)
+				  (forward-char offset)))))))))
 	    ;; Now handle the case where the mode binds TAB directly.
 	    ;; Bind it in an overriding map to use the local definition,
 	    ;; but narrowed to the chunk.
@@ -311,6 +315,9 @@ is the base mode."
 	    ;; that other hook functions get run in the (perhaps)
 	    ;; newly-selected buffer.
 	    (add-hook 'post-command-hook 'multi-select-buffer nil t)
+            ;; Reset mode cache on buffer change
+            (make-local-variable 'after-change-functions)
+            (add-to-list 'after-change-functions 'multi-reset-cache)
 	    ;; Avoid the uniqified name for the indirect buffer in the
 	    ;; mode line.
 	    (setq mode-line-buffer-identification
@@ -447,7 +454,8 @@ Assigned to `imenu-create-index-function'."
   "Narrow to the current chunk."
   (interactive)
   (unless (= (point-min) (point-max))
-    (apply #'narrow-to-region (cdr (multi-find-mode-at)))))
+    (apply #'narrow-to-region
+           (butlast (cdr (multi-find-mode-at))))))
 
 (defun multi-indenting-chunk-p ()
   "Is the current chunk in charge of indenting the current line?"
@@ -457,11 +465,7 @@ Assigned to `imenu-create-index-function'."
 
 (defun multi-chunk-column ()
   "Return the starting column of the current chunk."
-  (save-restriction
-    (widen)
-    (save-excursion 
-      (goto-char (nth 1 (multi-find-mode-at)))
-      (current-column))))
+  (nth 3 (multi-find-mode-at)))
 
 (defun multi-select-buffer ()
   "Select the appropriate (indirect) buffer corresponding to point's context."
@@ -488,23 +492,41 @@ Assigned to `imenu-create-index-function'."
 		(run-hooks 'multi-select-mode-hook))))))
     (error nil)))
 
-(defvar multi-mode-list (list t t t))
+(defvar multi-mode-list (list t t t t))
 
-(defsubst multi-make-list (mode start end)
+(defsubst multi-make-list (mode start end col)
   "Constructor for lists returned by elements of `multi-chunk-fns' &c.
 Destructively modifies `multi-mode-list' to avoid consing in
 `post-command-hook'."
   (setcar multi-mode-list mode)
   (setcar (cdr multi-mode-list) start)
   (setcar (cddr multi-mode-list) end)
+  (setcar (cdddr multi-mode-list) col)
   multi-mode-list)
+
+(defsubst multi-make-list (mode start end col)
+  (list mode start end col))
+
+(defvar multi-last-mode-at '())
+(make-variable-buffer-local 'multi-last-mode-at)
+
+(defun multi-reset-cache (b e l)
+  (setq multi-last-mode-at '()))
+
+(defun multi-find-mode-at (&optional pos)
+  (let ((pos (or pos (point)))
+        (cache (assq pos multi-last-mode-at)))
+    (or cache
+        (let ((mode (multi-find-mode-at-1 pos)))
+          (add-to-list 'multi-last-mode-at `((,pos . ,mode)))
+          mode))))
 
 ;; It would be nice to cache the results of this on text properties,
 ;; but that probably won't work well if chunks can be nested.  In that
 ;; case, you can't just mark everything between delimiters -- you have
 ;; to consider other possible regions between them.  For now, we do
 ;; the calculation each time, scanning outwards from point.
-(defun multi-find-mode-at (&optional pos)
+(defun multi-find-mode-at-1 (&optional pos)
   "Apply elements of `multi-chunk-fns' to determine major mode at POS.
 Return a list (MODE START END), the value returned by the function in the
 list for which START is closest to POS (and before it); i.e. the innermost
@@ -524,13 +546,14 @@ mode is selected.  POS defaults to point."
 			 (>= (nth 1 val) start)))
 	    (setq mode (nth 0 val)
 		  start (nth 1 val)
-		  end (nth 2 val)))))
+		  end (nth 2 val)
+                  col (nth 3 val)))))
     (unless (and (<= start end) (<= pos end) (>= pos start))
       (error "Bad multi-mode selection: %s, %s"
-	     (multi-make-list mode start end) pos))
+	     (multi-make-list mode start end col) pos))
     (if (= start end)
 	(setq end (1+ end)))
-    (multi-make-list mode start end)))
+    (multi-make-list mode start end col)))
 
 ;; This was basically for testing, and isn't a reasonable thing to use
 ;; otherwise.

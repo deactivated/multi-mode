@@ -20,11 +20,13 @@
 (require 'multi-mode)
 
 (defun multi-mako-mode ()
-  "Mode for editing PHP embedded in HTML, using multi-mode."
+  "Mode for editing Python embedded in HTML, using multi-mode."
   (interactive)
   (set (make-local-variable 'multi-alist)
-       '((html-mode)
-	 (python-mode . mako-chunk-region)
+       '((html-mode . mako-chunk-at)
+	 (css-mode)
+	 (js-mode)
+	 (python-mode)
 	 ))
   (add-hook 'multi-indirect-buffer-hook
 	    (lambda ()
@@ -33,53 +35,81 @@
 	    t t)
   (multi-mode-install-modes))
 
-(defun mako-chunk-region (pos)
-  "Mode-selecting function for Python embedded in HTML.
-See `multi-alist'."
-  (let ((case-fold-search t)
-	pi-start pi-end next-pi pi-mode pi-term)
+(defvar mako-regions
+  '(("\\(<%!?\\)" "%>" python-mode)
+    ("\\${" "}" python-mode)
+    ("<script[^>]*>" "</script>" js-mode)
+    ("<style[^>]*>" "</style>" css-mode)))
+
+(defun mako-region-mode (n)
+  (third n))
+
+(defun degroup-regexp (r)
+  (replace-regexp-in-string
+   "\\\\(" "\\\\(?:" (replace-regexp-in-string "\\\\(?:" "\\\\(" r)))
+
+(defun joined-regexp (parts)
+  (mapconcat (lambda (x)
+               (concat "\\(" (degroup-regexp x) "\\)"))
+             parts "\\|"))
+
+(defvar mako-start-regexp
+  (joined-regexp (mapcar 'car mako-regions)))
+
+(defvar mako-start-end-regexp
+  (joined-regexp
+   (append (mapcar 'car mako-regions)
+           (mapcar 'cadr mako-regions))))
+
+(defun mako-match-group ()
+  (/ (position-if-not 'null (cddr (match-data))) 2))
+
+(defun mako-chunk-at (pos)
+  (or (mako-chunk pos)
+      (mako-default-chunk pos)))
+
+(defun mako-default-chunk (pos)
+  (save-excursion
+    (goto-char pos)
+    (let ((e (save-excursion
+               (if (re-search-forward mako-start-regexp nil t)
+                   (match-beginning 0) (point-max))))
+          (b (save-excursion
+               (cond ((looking-at mako-start-end-regexp) pos)
+                     ((re-search-backward mako-start-end-regexp nil t) (match-end 0))
+                     (t (point-min))))))
+      (list 'html-mode b e 0))))
+
+(defun mako-chunk (pos)
+  (save-excursion
+    (goto-char pos)
+    (loop while (re-search-backward mako-start-regexp nil t)
+          for n = (mako-match-group)
+          for os = (match-beginning 0)
+          for oe = (match-end 0)
+          for e = (mako-chunk-end oe n)
+          if (>= e pos)
+            return (list
+                    (mako-region-mode (nth n mako-regions))
+                    (max (or last-end 0) oe)
+                    e
+                    (current-column))
+          else
+            maximize e into last-end)))
+
+(defun mako-chunk-end (pos n)
+  (let ((stack (list n)))
     (save-excursion
-      (save-restriction
-	(widen)
-	(goto-char pos)
-	(save-excursion
-	  (save-excursion
-	    (skip-chars-forward " \t\n")
-	    (if (re-search-backward "\\(<%!?\\)[ \t\n]+" (first pi-start) t)
-		(setq pi-start (list (match-end 1) "%>" 'python-mode))))
-	  
-	  (save-excursion
-	    (if (re-search-backward "\\${" (first pi-start) t)
-		(setq pi-start (list (match-end 0) "}" 'python-mode))))
-
-	  ;; Ready to search for matching terminator or next
-	  ;; processing instruction.
-	  (goto-char (or (first pi-start) pos))
-	  
-	  (if pi-start
-	      (progn
-		(re-search-forward (second pi-start) nil t)
-		(setq pi-end (match-beginning 0))
-		(goto-char pos)))
-	  
-	  (if (and pi-start pi-end (< pos pi-end))
-	      ;; We were between PI start and terminator.
-	      (list (third pi-start) (first pi-start) pi-end)
-	    ;; Otherwise, look forward for a PI to delimit the HTML
-	    ;; region.
-	    (progn
-	      (save-excursion
-		(search-backward "<" (or pi-end (point-min)) t)
-		(if (re-search-forward "\\(<%!?\\)[ \t\n]+" nil t)
-		    (setq next-pi (match-end 1))))
-	      
-	      (save-excursion
-		(search-backward "$" (or pi-end (point-min)) t)
-		(if (re-search-forward "\\${" next-pi t)
-		    (setq next-pi (match-end 0))))
-
-	      (list 'html-mode (or pi-end (point-min)) next-pi)
-	      )))))))
+      (goto-char pos)
+      (loop while (re-search-forward mako-start-end-regexp nil t)
+            for n = (mako-match-group)
+            if (and (>= n (length mako-regions))
+                    (= n (+ (length mako-regions) (first stack))))
+              do (pop stack) end
+            if (< n (length mako-regions))
+              do (push n stack) end
+            if (= (length stack) 0)
+              return (1- (match-beginning 0))))))
 
 (provide 'multi-mako)
 ;;; multi-mako.el ends here
