@@ -213,129 +213,129 @@ is the base mode."
     ;; this.  To invoke minor modes, you should just use `mode:' in
     ;; `local variables'.]
     (if (eq 'autoload (car-safe (indirect-function mode)))
-	(with-temp-buffer
-	  (insert "Local Variables:\nmode: fundamental\nEnd:\n")
-	  (funcall mode)
-	  (hack-local-variables)))
+        (with-temp-buffer
+          (insert "Local Variables:\nmode: fundamental\nEnd:\n")
+          (funcall mode)
+          (hack-local-variables)))
     (let ((new-buffer (if base
-			  (current-buffer)
-			;; Perhaps the name uniquification should use
-			;; the mode name somehow (without getting long).
-			(make-indirect-buffer (current-buffer)
-					      (generate-new-buffer-name
-					       (buffer-name))))))
+                          (current-buffer)
+                        ;; Perhaps the name uniquification should use
+                        ;; the mode name somehow (without getting long).
+                        (make-indirect-buffer (current-buffer)
+                                              (generate-new-buffer-name
+                                               (buffer-name))))))
       (with-current-buffer (multi-base-buffer)
-	(push (cons mode new-buffer) multi-indirect-buffers-alist)
-	(let ((alist multi-indirect-buffers-alist)
-	      (hook multi-indirect-buffer-hook)
-	      (fns (if chunk-fn
-		       (add-to-list 'multi-chunk-fns chunk-fn)
-		     multi-chunk-fns))
-	      (alist2 multi-alist)
-	      (file (buffer-file-name))
-	      (base-name (buffer-name))
-	      (coding buffer-file-coding-system)
-	      (multi-mode t))	       ; The modes might examine this.
-	  (with-current-buffer new-buffer
-	    (unless (and base (eq mode major-mode))
-	      (funcall mode))
-	    ;; Now we can make it local:
-	    (set (make-local-variable 'multi-mode) t)
-	    ;; Use file's local variables section to set variables in
-	    ;; this buffer.  (Don't just copy local variables from the
-	    ;; base buffer because it may have set things locally that
-	    ;; we don't want in the other modes.)  We need to prevent
-	    ;; `mode' being processed and re-setting the major mode.
-	    ;; It all goes badly wrong if `hack-one-local-variable' is
-	    ;; advised.  The appropriate mechanism to get round this
-	    ;; appears to be `ad-with-originals', but we don't want to
-	    ;; pull in the advice package unnecessarily.  `flet'-like
-	    ;; mechanisms lose with advice because `fset' acts on the
-	    ;; advice anyway.
-	    (if (featurep 'advice)
-		(ad-with-originals (hack-one-local-variable)
-		  (multi-hack-local-variables))
-	      (multi-hack-local-variables))
-	    ;; Indentation should first narrow to the chunk.  Modes
-	    ;; should normally just bind `indent-line-function' to
-	    ;; handle indentation.
-	    (when indent-line-function ; not that it should ever be nil...
-	      (set (make-local-variable 'indent-line-function)
-		   `(lambda ()
-		      (save-restriction
-			(multi-narrow-to-chunk)
-			(let ((initial-column (current-column)) offset)
-			  (,indent-line-function)
-			  (when (multi-indenting-chunk-p)
-			    (let ((min-indent (+ 2 (multi-chunk-column))))
-			      (back-to-indentation)
-			      (setq offset (- initial-column (current-column)))
-			      (if (< (current-column) min-indent)
-				  (indent-line-to min-indent))
-			      (if (> initial-column 0)
-				  (forward-char offset)))))))))
-	    ;; Now handle the case where the mode binds TAB directly.
-	    ;; Bind it in an overriding map to use the local definition,
-	    ;; but narrowed to the chunk.
-	    (let ((tab (local-key-binding "\t")))
-	      (when tab
-		(make-local-variable 'minor-mode-map-alist)
-		(push (cons multi-mode
-			    (let ((map (make-sparse-keymap)))
-			      (define-key map "\t"
-				`(lambda ()
-				   (interactive)
-				   (save-restriction
-				     (multi-narrow-to-chunk)
-				     (call-interactively ',tab))))
-			      map))
-		      minor-mode-map-alist)))
-	    (setq multi-ppss '())
-	    (setq multi-normal-fontify-function
-		  font-lock-fontify-region-function)
-	    (set (make-local-variable 'font-lock-fontify-region-function)
-		 #'multi-fontify-region)
-	    (setq multi-normal-fontify-functions fontification-functions)
-	    (setq fontification-functions '(multi-fontify))
-	    ;; Don't let parse-partial-sexp get fooled by syntax outside
-	    ;; the chunk being fontified.  (Not in Emacs 21.)
-	    (set (make-local-variable 'font-lock-dont-widen) t)
-	    (setq multi-late-index-function imenu-create-index-function)
-	    (setq imenu-create-index-function #'multi-create-index
-		  multi-indirect-buffer-hook hook)
-	    ;; Kill the base buffer along with the indirect one; careful not
-	    ;; to infloop.
-	    (add-hook 'kill-buffer-hook
-		      '(lambda ()
-			 (setq kill-buffer-hook nil)
-			 (set-buffer-modified-p nil)
-			 (kill-buffer (buffer-base-buffer (current-buffer))))
-		      t t)
-	    ;; This should probably be at the front of the hook list, so
-	    ;; that other hook functions get run in the (perhaps)
-	    ;; newly-selected buffer.
-	    (add-hook 'post-command-hook 'multi-select-buffer nil t)
+        (push (cons mode new-buffer) multi-indirect-buffers-alist)
+        (let ((alist multi-indirect-buffers-alist)
+              (hook multi-indirect-buffer-hook)
+              (fns (if chunk-fn
+                       (add-to-list 'multi-chunk-fns chunk-fn)
+                     multi-chunk-fns))
+              (alist2 multi-alist)
+              (file (buffer-file-name))
+              (base-name (buffer-name))
+              (coding buffer-file-coding-system)
+              (multi-mode t))	       ; The modes might examine this.
+          (with-current-buffer new-buffer
+            (unless (and base (eq mode major-mode))
+              (funcall mode))
+            ;; Now we can make it local:
+            (set (make-local-variable 'multi-mode) t)
+            ;; Use file's local variables section to set variables in
+            ;; this buffer.  (Don't just copy local variables from the
+            ;; base buffer because it may have set things locally that
+            ;; we don't want in the other modes.)  We need to prevent
+            ;; `mode' being processed and re-setting the major mode.
+            ;; It all goes badly wrong if `hack-one-local-variable' is
+            ;; advised.  The appropriate mechanism to get round this
+            ;; appears to be `ad-with-originals', but we don't want to
+            ;; pull in the advice package unnecessarily.  `flet'-like
+            ;; mechanisms lose with advice because `fset' acts on the
+            ;; advice anyway.
+            (if (featurep 'advice)
+                (ad-with-originals (hack-one-local-variable)
+                  (multi-hack-local-variables))
+              (multi-hack-local-variables))
+            ;; Indentation should first narrow to the chunk.  Modes
+            ;; should normally just bind `indent-line-function' to
+            ;; handle indentation.
+            (when indent-line-function ; not that it should ever be nil...
+              (set (make-local-variable 'indent-line-function)
+                   `(lambda ()
+                      (save-restriction
+                        (multi-narrow-to-chunk)
+                        (let ((initial-column (current-column)) offset)
+                          (,indent-line-function)
+                          (when (multi-indenting-chunk-p)
+                            (let ((min-indent (+ 2 (multi-chunk-column))))
+                              (back-to-indentation)
+                              (setq offset (- initial-column (current-column)))
+                              (if (< (current-column) min-indent)
+                                  (indent-line-to min-indent))
+                              (if (> initial-column 0)
+                                  (forward-char offset)))))))))
+            ;; Now handle the case where the mode binds TAB directly.
+            ;; Bind it in an overriding map to use the local definition,
+            ;; but narrowed to the chunk.
+            (let ((tab (local-key-binding "\t")))
+              (when tab
+                (make-local-variable 'minor-mode-map-alist)
+                (push (cons multi-mode
+                            (let ((map (make-sparse-keymap)))
+                              (define-key map "\t"
+                                `(lambda ()
+                                   (interactive)
+                                   (save-restriction
+                                     (multi-narrow-to-chunk)
+                                     (call-interactively ',tab))))
+                              map))
+                      minor-mode-map-alist)))
+            (setq multi-ppss '())
+            (setq multi-normal-fontify-function
+                  font-lock-fontify-region-function)
+            (set (make-local-variable 'font-lock-fontify-region-function)
+                 #'multi-fontify-region)
+            (setq multi-normal-fontify-functions fontification-functions)
+            (setq fontification-functions '(multi-fontify))
+            ;; Don't let parse-partial-sexp get fooled by syntax outside
+            ;; the chunk being fontified.  (Not in Emacs 21.)
+            (set (make-local-variable 'font-lock-dont-widen) t)
+            (setq multi-late-index-function imenu-create-index-function)
+            (setq imenu-create-index-function #'multi-create-index
+                  multi-indirect-buffer-hook hook)
+            ;; Kill the base buffer along with the indirect one; careful not
+            ;; to infloop.
+            (add-hook 'kill-buffer-hook
+                      '(lambda ()
+                         (setq kill-buffer-hook nil)
+                         (set-buffer-modified-p nil)
+                         (kill-buffer (buffer-base-buffer (current-buffer))))
+                      t t)
+            ;; This should probably be at the front of the hook list, so
+            ;; that other hook functions get run in the (perhaps)
+            ;; newly-selected buffer.
+            (add-hook 'post-command-hook 'multi-select-buffer nil t)
             ;; Reset mode cache on buffer change
             (make-local-variable 'after-change-functions)
             (add-to-list 'after-change-functions 'multi-reset-cache)
-	    ;; Avoid the uniqified name for the indirect buffer in the
-	    ;; mode line.
-	    (setq mode-line-buffer-identification
-		  (propertized-buffer-identification base-name))
-	    ;; Fixme: Are there other things to copy?
-	    (setq buffer-file-coding-system coding)
-	    ;; For benefit of things like VC
-	    (setq buffer-file-name file)
-	    (vc-find-file-hook))
-	  ;; Propagate updated values of the relevant buffer-local
-	  ;; variables to the indirect buffers.
-	  (dolist (x alist)
-	    (if (car x)
-		(with-current-buffer (cdr x)
-		  (setq multi-chunk-fns fns)
-		  (setq multi-indirect-buffers-alist alist)
-		  (setq multi-alist alist2)
-		  (run-hooks 'multi-indirect-buffer-hook)))))))))
+            ;; Avoid the uniqified name for the indirect buffer in the
+            ;; mode line.
+            (setq mode-line-buffer-identification
+                  (propertized-buffer-identification base-name))
+            ;; Fixme: Are there other things to copy?
+            (setq buffer-file-coding-system coding)
+            ;; For benefit of things like VC
+            (setq buffer-file-name file)
+            (vc-find-file-hook))
+          ;; Propagate updated values of the relevant buffer-local
+          ;; variables to the indirect buffers.
+          (dolist (x alist)
+            (if (car x)
+                (with-current-buffer (cdr x)
+                  (setq multi-chunk-fns fns)
+                  (setq multi-indirect-buffers-alist alist)
+                  (setq multi-alist alist2)
+                  (run-hooks 'multi-indirect-buffer-hook)))))))))
 
 (defun multi-map-over-chunks (beg end thunk)
   "For all chunks between BEG and END, execute THUNK.
@@ -412,11 +412,11 @@ Fontifies chunk-by-chunk within the region from START for up to
 	     (setq old-state (or ppss (cdr nearest)))
 	     (let ((state (parse-partial-sexp beg end nil nil old-state)))
 	       (add-to-list 'multi-ppss (cons end state)))
-	     
+
 	     (funcall
 	      ,(symbol-function 'font-lock-fontify-syntactically-region)
 	      start end loudly old-state)))
-       (funcall 
+       (funcall
 	,(symbol-function 'font-lock-fontify-syntactically-region)
 	start end loudly ppss))))
 
